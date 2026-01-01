@@ -2,6 +2,7 @@
 """
 Todo Console Application
 A simple in-memory todo application with a professional UI using Rich library.
+This is a legacy entry point. Use main.py for the new architecture.
 """
 
 from manager import ApplicationManager
