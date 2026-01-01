@@ -1,0 +1,2 @@
+# Requirements for Todo Console Application
+rich>=13.0.0
