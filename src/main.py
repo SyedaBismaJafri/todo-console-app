@@ -2,8 +2,10 @@
 Main entry point for the Todo Console App.
 This file initializes the new subagents and starts the application.
 """
-from subagents.task_subagent import TaskSubagent
-from subagents.display_subagent import DisplaySubagent
+from services.task_service import TaskService
+from services.task_subagent import TaskSubagent
+from ui.display_subagent import DisplaySubagent
+from ui.console_ui import ConsoleUI
 
 
 def main():
@@ -12,123 +14,143 @@ def main():
     """
     print("Initializing Todo Console App...")
 
-    # Initialize subagents
-    task_subagent = TaskSubagent()
+    # Initialize services and subagents
+    task_service = TaskService()
+    task_subagent = TaskSubagent(task_service)
+    # Set the task_subagent reference in task_service for saving tasks
+    task_service.set_task_subagent(task_subagent)
     display_subagent = DisplaySubagent()
+    console_ui = ConsoleUI()
 
     print("Todo Console App initialized successfully!")
-    display_subagent.display_welcome()
+    print("Note: To run the background reminder service, run 'python -m services.background_reminder_service' in a separate terminal.")
+    console_ui.display_welcome()
 
     while True:
-        choice = display_subagent.display_menu()
+        console_ui.display_menu()
+        choice = console_ui.get_user_choice()
 
         if choice == "1":
-            # View all tasks
-            tasks = task_subagent.get_all_tasks()
-            display_subagent.display_tasks(tasks)
+            # Add a new task
+            title, description, priority, tags, is_recurring, frequency, due_date = console_ui.get_task_details()
+            task = task_service.create_task(title, description, priority, tags, is_recurring, frequency, due_date)
+            if task:
+                console_ui.show_message("Task added successfully!", "success")
+            else:
+                console_ui.show_message("Failed to add task.", "error")
 
         elif choice == "2":
-            # Add a new task
-            title, description, due_date, priority, tags = display_subagent.get_task_details()
-            task = task_subagent.create_task(title, description, due_date, priority, tags)
-            if task:
-                display_subagent.show_message("Task added successfully!", "success")
-            else:
-                display_subagent.show_message("Failed to add task.", "error")
+            # View all tasks
+            tasks = task_service.get_all_tasks()
+            display_subagent.display_tasks(tasks)
 
         elif choice == "3":
             # Update a task
-            if not task_subagent.get_all_tasks():
-                display_subagent.show_message("No tasks available to update.", "warning")
+            if not task_service.get_all_tasks():
+                console_ui.show_message("No tasks available to update.", "warning")
                 continue
 
-            display_subagent.display_tasks(task_subagent.get_all_tasks())
-            task_id = display_subagent.get_task_id("update")
+            display_subagent.display_tasks(task_service.get_all_tasks())
+            task_id = console_ui.get_task_id("update")
 
-            if task_subagent.get_task(task_id) is not None:
-                display_subagent.show_message("Enter new values (press Enter to keep current value):")
-                title, description, due_date, priority, tags = display_subagent.get_task_details()
+            if task_service.get_task(task_id) is not None:
+                current_task = task_service.get_task(task_id)
+                title, description, priority, tags, is_recurring, frequency, due_date = console_ui.get_updated_task_details(
+                    current_task.title,
+                    current_task.description,
+                    current_task.priority,
+                    current_task.tags,
+                    current_task.is_recurring,
+                    current_task.frequency,
+                    current_task.due_date
+                )
 
-                updates = {}
-                if title:
-                    updates["title"] = title
-                if description:
-                    updates["description"] = description
-                if due_date:
-                    updates["due_date"] = due_date
-                if priority:
-                    updates["priority"] = priority
-                if tags:
-                    updates["tags"] = tags
-
-                success = task_subagent.update_task(task_id, **updates)
+                success = task_service.update_task(task_id, title, description, priority, tags, is_recurring, frequency, due_date)
                 if success:
-                    display_subagent.show_message("Task updated successfully!", "success")
+                    console_ui.show_message("Task updated successfully!", "success")
                 else:
-                    display_subagent.show_message("Failed to update task.", "error")
+                    console_ui.show_message("Failed to update task.", "error")
             else:
-                display_subagent.show_message("Task not found.", "error")
+                console_ui.show_message("Task not found.", "error")
 
         elif choice == "4":
             # Delete a task
-            if not task_subagent.get_all_tasks():
-                display_subagent.show_message("No tasks available to delete.", "warning")
+            if not task_service.get_all_tasks():
+                console_ui.show_message("No tasks available to delete.", "warning")
                 continue
 
-            display_subagent.display_tasks(task_subagent.get_all_tasks())
-            task_id = display_subagent.get_task_id("delete")
+            display_subagent.display_tasks(task_service.get_all_tasks())
+            task_id = console_ui.get_task_id("delete")
 
-            if display_subagent.confirm_action("Are you sure you want to delete this task?"):
-                success = task_subagent.delete_task(task_id)
-                if success:
-                    display_subagent.show_message("Task deleted successfully!", "success")
-                else:
-                    display_subagent.show_message("Failed to delete task.", "error")
+            success = task_service.delete_task(task_id)
+            if success:
+                console_ui.show_message("Task deleted successfully!", "success")
             else:
-                display_subagent.show_message("Deletion cancelled.", "warning")
+                console_ui.show_message("Failed to delete task.", "error")
 
         elif choice == "5":
-            # Mark task as complete/incomplete
-            if not task_subagent.get_all_tasks():
-                display_subagent.show_message("No tasks available.", "warning")
+            # Toggle task status
+            if not task_service.get_all_tasks():
+                console_ui.show_message("No tasks available.", "warning")
                 continue
 
-            display_subagent.display_tasks(task_subagent.get_all_tasks())
-            task_id = display_subagent.get_task_id("toggle completion status")
+            display_subagent.display_tasks(task_service.get_all_tasks())
+            task_id = console_ui.get_task_id("toggle completion status")
 
-            task = task_subagent.get_task(task_id)
-            if task:
-                if task.get("completed", False):
-                    success = task_subagent.mark_incomplete(task_id)
-                    status = "incomplete"
-                else:
-                    success = task_subagent.mark_completed(task_id)
-                    status = "complete"
-
-                if success:
-                    display_subagent.show_message(f"Task marked as {status}!", "success")
-                else:
-                    display_subagent.show_message(f"Failed to mark task as {status}.", "error")
+            success = task_service.toggle_task_status(task_id)
+            if success:
+                console_ui.show_message("Task status toggled successfully!", "success")
             else:
-                display_subagent.show_message("Task not found.", "error")
+                console_ui.show_message("Failed to toggle task status.", "error")
 
         elif choice == "6":
-            # Search tasks
-            criteria = display_subagent.get_search_criteria()
-            tasks = task_subagent.search_tasks(**criteria)
-            display_subagent.display_tasks(tasks)
+            # Show help
+            console_ui.show_help()
 
         elif choice == "7":
-            # Show help
-            display_subagent.show_help()
+            # Search/Filter menu
+            while True:
+                display_subagent.display_search_filter_menu()
+                search_choice = display_subagent.get_search_filter_choice()
+
+                if search_choice == "1":
+                    # Search tasks
+                    keyword = display_subagent.get_search_keyword()
+                    found_tasks = task_subagent.find_tasks(keyword)
+                    display_subagent.display_tasks(found_tasks)
+
+                elif search_choice == "2":
+                    # Sort by priority
+                    reverse = display_subagent.get_sort_order()
+                    sorted_tasks = task_subagent.get_ordered_tasks('priority', reverse)
+                    display_subagent.display_tasks(sorted_tasks)
+
+                elif search_choice == "3":
+                    # Sort by date
+                    reverse = display_subagent.get_sort_order()
+                    sorted_tasks = task_subagent.get_ordered_tasks('date', reverse)
+                    display_subagent.display_tasks(sorted_tasks)
+
+                elif search_choice == "4":
+                    # Back to main menu
+                    break
+
+                else:
+                    console_ui.show_message("Invalid option. Please try again.", "error")
 
         elif choice == "8":
+            # Upcoming Deadlines
+            upcoming_tasks = task_subagent.get_upcoming_deadlines()
+            display_subagent.display_upcoming_deadlines(upcoming_tasks)
+
+        elif choice == "9":
             # Exit
-            display_subagent.show_message("Thank you for using Todo Console App!", "info")
-            break
+            if console_ui.confirm_exit():
+                console_ui.show_message("Thank you for using Todo Console App!", "success")
+                break
 
         else:
-            display_subagent.show_message("Invalid option. Please try again.", "error")
+            console_ui.show_message("Invalid option. Please try again.", "error")
 
 
 if __name__ == "__main__":
